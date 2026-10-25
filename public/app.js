@@ -146,7 +146,7 @@
     if (!searching) startBtn.disabled = false;
   });
   socket.on("disconnect", () => {
-    cleanup(false);
+    cleanup(true);
     searching = false;
     setSessionControls(false);
     say("与服务器断开连接，正在尝试恢复…");
