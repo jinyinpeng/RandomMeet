@@ -249,19 +249,36 @@
     stream.getTracks().forEach(track => connection.addTrack(track, stream));
     connection.ontrack = event => {
       if (pc !== connection || generation !== gen) return;
-      // Some browsers may provide a track without an associated stream.
-      const incoming = event.streams && event.streams[0]
-        ? event.streams[0]
-        : new MediaStream([event.track]);
+      // Prefer the stream supplied by WebRTC. If a browser emits streamless tracks,
+      // merge them into one MediaStream instead of replacing the previous track.
+      // Replacing srcObject for each streamless event can silently drop audio or video.
+      let incoming = remote.srcObject instanceof MediaStream ? remote.srcObject : null;
+      if (event.streams && event.streams[0]) {
+        incoming = event.streams[0];
+      } else {
+        if (!incoming) incoming = new MediaStream();
+        if (!incoming.getTracks().some(track => track.id === event.track.id)) {
+          incoming.addTrack(event.track);
+        }
+      }
       remote.srcObject = incoming;
-      $("remoteText").hidden = true;
+      $("remoteText").hidden = false;
       if (mediaWatchdog) clearTimeout(mediaWatchdog);
       mediaWatchdog = null;
-      // Explicitly start playback and surface autoplay failures instead of silently appearing connected.
       const playback = remote.play();
       if (playback && typeof playback.catch === "function") {
-        playback.catch(() => say("Remote media received, but your browser blocked playback. Click the video or check your tab audio settings."));
+        playback.catch(error => {
+          console.warn("[RandomMeet] Remote playback failed", error);
+          say("Remote media arrived, but playback was blocked. Click the remote video to start audio/video.");
+        });
       }
+      console.info("[RandomMeet] remote track received", {
+        kind: event.track.kind,
+        streamTracks: incoming.getTracks().map(track => track.kind + ":" + track.readyState)
+      });
+      event.track.addEventListener("ended", () => {
+        console.warn("[RandomMeet] remote track ended", event.track.kind);
+      }, { once: true });
     };
     connection.onicecandidate = event => {
       if (!event.candidate || pc !== connection || generation !== gen || !peerId) return;
