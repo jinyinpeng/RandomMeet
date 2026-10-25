@@ -102,9 +102,32 @@ function normalizePrefs(prefs) {
 }
 
 function match(id, prefs) {
+  console.log("[match] find received", JSON.stringify({
+    socket: id.slice(0, 8),
+    mode: prefs.mode,
+    wantGender: prefs.wantGender,
+    wantNationality: prefs.wantNationality,
+    waitingCount: waiting.size
+  }));
   for (const [other, otherPrefs] of waiting) {
     if (other === id) continue;
-    if (!canPair(prefs, otherPrefs)) continue;
+    if (!canPair(prefs, otherPrefs)) {
+      console.log("[match] candidate rejected", JSON.stringify({
+        socket: id.slice(0, 8),
+        candidate: other.slice(0, 8),
+        sameMode: prefs.mode === otherPrefs.mode,
+        leftWantsGenderCompatible: compatible(prefs.wantGender, otherPrefs.gender),
+        leftWantsNationalityCompatible: compatible(prefs.wantNationality, otherPrefs.nationality),
+        rightWantsGenderCompatible: compatible(otherPrefs.wantGender, prefs.gender),
+        rightWantsNationalityCompatible: compatible(otherPrefs.wantNationality, prefs.nationality),
+        sameClient: Boolean(prefs.clientId && otherPrefs.clientId && prefs.clientId === otherPrefs.clientId),
+        blockedOrRecent: Boolean(
+          (prefs.clientId && (otherPrefs.blockedIds.includes(prefs.clientId) || otherPrefs.recentMatches.includes(prefs.clientId))) ||
+          (otherPrefs.clientId && (prefs.blockedIds.includes(otherPrefs.clientId) || prefs.recentMatches.includes(otherPrefs.clientId)))
+        )
+      }));
+      continue;
+    }
 
     waiting.delete(other);
     waiting.delete(id);
@@ -113,16 +136,19 @@ function match(id, prefs) {
     peers.set(other, id);
     pairSessions.set(id, sessionId);
     pairSessions.set(other, sessionId);
+    console.log("[match] paired", JSON.stringify({ left: id.slice(0, 8), right: other.slice(0, 8), mode: prefs.mode }));
     io.to(id).emit("matched", { peerId: other, peerClientId: otherPrefs.clientId || "", initiator: true, sessionId });
     io.to(other).emit("matched", { peerId: id, peerClientId: prefs.clientId || "", initiator: false, sessionId });
     return;
   }
 
   waiting.set(id, prefs);
+  console.log("[match] waiting", JSON.stringify({ socket: id.slice(0, 8), waitingCount: waiting.size }));
   io.to(id).emit("status", "Waiting for other users…");
 }
 
 io.on("connection", socket => {
+  console.log("[socket] connected", socket.id.slice(0, 8));
   socket.on("find", prefs => {
     if (!allowEvent(socket, "find", 2, 1000)) {
       socket.emit("status", "You are doing that too quickly. Please wait a moment and try again.");
@@ -211,7 +237,8 @@ io.on("connection", socket => {
     waiting.delete(socket.id);
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", reason => {
+    console.log("[socket] disconnected", JSON.stringify({ socket: socket.id.slice(0, 8), reason }));
     waiting.delete(socket.id);
     endPair(socket.id);
     socketClients.delete(socket.id);
