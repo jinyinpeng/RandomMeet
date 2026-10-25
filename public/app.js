@@ -12,6 +12,7 @@
   let stream = null;
   let pc = null;
   let peerId = null;
+  let sessionId = null;
   let searching = false;
   let generation = 0;
   let pendingIce = [];
@@ -37,6 +38,7 @@
       pc = null;
     }
     peerId = null;
+    sessionId = null;
     remote.srcObject = null;
     $("remoteText").hidden = false;
     if (stopMedia && stream) {
@@ -82,7 +84,7 @@
     };
     connection.onicecandidate = event => {
       if (!event.candidate || pc !== connection || generation !== gen || !peerId) return;
-      socket.emit("signal", { type: "ice", data: event.candidate });
+      socket.emit("signal", { type: "ice", data: event.candidate, sessionId });
     };
     connection.onconnectionstatechange = () => {
       if (pc !== connection || generation !== gen) return;
@@ -98,7 +100,7 @@
       if (pc !== connection || generation !== gen) return;
       await connection.setLocalDescription(offer);
       if (pc !== connection || generation !== gen) return;
-      socket.emit("signal", { type: "offer", data: connection.localDescription });
+      socket.emit("signal", { type: "offer", data: connection.localDescription, sessionId });
     }
   }
 
@@ -159,6 +161,7 @@
   socket.on("matched", async data => {
     cleanup(false);
     peerId = data.peerId;
+    sessionId = data.sessionId || null;
     const gen = generation;
     say("已匹配，正在建立连接…");
     try {
@@ -174,6 +177,7 @@
     const connection = pc;
     const gen = generation;
     if (!connection || !message || !["offer", "answer", "ice"].includes(message.type)) return;
+    if (sessionId && message.sessionId && message.sessionId !== sessionId) return;
     try {
       if (message.type === "ice") {
         if (!message.data || pc !== connection || generation !== gen) return;
@@ -193,7 +197,7 @@
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
         if (pc !== connection || generation !== gen) return;
-        socket.emit("signal", { type: "answer", data: connection.localDescription });
+        socket.emit("signal", { type: "answer", data: connection.localDescription, sessionId });
       } else if (message.type === "answer") {
         await connection.setRemoteDescription(message.data);
         await flushPendingIce(connection, gen);
@@ -203,7 +207,8 @@
     }
   });
 
-  socket.on("peer-ended", () => {
+  socket.on("peer-ended", data => {
+    if (sessionId && data?.sessionId && data.sessionId !== sessionId) return;
     cleanup(true);
     searching = false;
     setSessionControls(false);
