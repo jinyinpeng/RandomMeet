@@ -16,6 +16,7 @@
   let searching = false;
   let generation = 0;
   let pendingIce = [];
+  let earlySignals = [];
   let configuredIceServers = null;
 
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
@@ -185,6 +186,11 @@
     say("已匹配，正在建立连接…");
     try {
       await connect(Boolean(data.initiator), gen);
+      // Socket events from the two peers can cross in flight: an offer may arrive
+      // just before this client's "matched" event. Replay only signals for this session.
+      const queued = earlySignals.filter(message => message.sessionId === sessionId);
+      earlySignals = [];
+      for (const message of queued) await processSignal(message);
     } catch (error) {
       if (generation !== gen) return;
       cleanup(false);
@@ -192,11 +198,11 @@
     }
   });
 
-  socket.on("signal", async message => {
+  async function processSignal(message) {
     const connection = pc;
     const gen = generation;
     if (!connection || !message || !["offer", "answer", "ice"].includes(message.type)) return;
-    if (sessionId && message.sessionId && message.sessionId !== sessionId) return;
+    if (!sessionId || message.sessionId !== sessionId) return;
     try {
       if (message.type === "ice") {
         if (!message.data || pc !== connection || generation !== gen) return;
@@ -223,6 +229,19 @@
       }
     } catch (error) {
       if (generation === gen) say("网络连接协商失败，请点击“跳过”重新匹配。");
+    }
+  }
+
+  socket.on("signal", message => {
+    if (!message || !["offer", "answer", "ice"].includes(message.type)) return;
+    if (sessionId) {
+      if (message.sessionId !== sessionId) return;
+      void processSignal(message);
+      return;
+    }
+    // Keep a small bounded queue for the rare signal-before-matched race.
+    if (typeof message.sessionId === "string" && earlySignals.length < 20) {
+      earlySignals.push(message);
     }
   });
 
