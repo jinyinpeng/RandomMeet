@@ -8,3 +8,6 @@
 
 /* Private safety console */
 .admin-card{margin-top:24px}.admin-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:22px}.reports-list{display:grid;gap:10px;margin-top:12px}.report-entry{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fcfbff;overflow-wrap:anywhere}.report-entry h3{margin:0 0 5px;text-transform:capitalize;font-size:14px}.report-entry p{margin:4px 0;color:var(--muted);font-size:12px}#adminStatus{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+
+/* Manage blocked users */
+.manage-blocked-button{margin-top:12px;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:12px;padding:10px 14px;font-size:12px;font-weight:650;cursor:pointer}.manage-blocked-button:hover{border-color:#c6b6fb;color:var(--ink)}.blocked-list{display:grid;gap:9px;max-height:300px;overflow-y:auto;margin:14px 0}.blocked-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left}.blocked-details{display:grid;gap:4px;min-width:0}.blocked-details strong{font-size:13px}.blocked-details small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}.unblock-button{padding:8px 12px;flex-shrink:0}.blocked-empty{font-size:13px;color:var(--muted);text-align:center;padding:14px}
