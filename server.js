@@ -1,7 +1,7 @@
 const express = require("express");
 const http = require("http");
 const path = require("path");
-const { randomUUID } = require("crypto");
+const { randomUUID, createHmac } = require("crypto");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -137,6 +137,23 @@ io.on("connection", socket => {
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "RandomMeet" }));
+app.get("/ice-config", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const stunUrls = (process.env.STUN_URLS || "stun:stun.l.google.com:19302")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  const iceServers = stunUrls.map(url => ({ urls: url }));
+  const turnUrls = (process.env.TURN_URLS || "")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  const sharedSecret = process.env.TURN_SHARED_SECRET;
+  if (turnUrls.length && sharedSecret) {
+    const configuredTtl = Number.parseInt(process.env.TURN_TTL_SECONDS || "3600", 10);
+    const ttl = Number.isFinite(configuredTtl) ? Math.min(86400, Math.max(300, configuredTtl)) : 3600;
+    const username = String(Math.floor(Date.now() / 1000) + ttl) + ":" + randomUUID();
+    const credential = createHmac("sha1", sharedSecret).update(username).digest("base64");
+    iceServers.push({ urls: turnUrls, username, credential });
+  }
+  res.json({ iceServers });
+});
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 const port = Number(process.env.PORT || 3000);
