@@ -212,7 +212,7 @@
     if (remote.srcObject && typeof remote.srcObject.getVideoTracks === "function") {
       remote.srcObject.getVideoTracks().forEach(track => { track.enabled = false; });
     }
-    say("A TURN relay is being used. Switched to audio-only to reduce bandwidth.");
+    say(notifyPeer ? "The other person’s network cannot establish a direct video connection. Switched to audio-only." : "The video connection requires a network relay. Switched to audio-only.");
     if (notifyPeer && sessionId) socket.emit("signal", { type: "audio-fallback", data: { reason: "turn-relay" }, sessionId });
   }
 
