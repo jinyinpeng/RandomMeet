@@ -318,6 +318,9 @@
     if (!searching) startBtn.disabled = false;
   });
   socket.on("disconnect", () => {
+    reportGate.hidden = true;
+    $("reportSubmit").disabled = false;
+    reportForm.reset();
     cleanup(true);
     searching = false;
     setSessionControls(false);
