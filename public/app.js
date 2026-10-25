@@ -410,7 +410,9 @@
     say("This person has been blocked on this browser and the chat has ended.");
   };
 
-  renderBlocked();\n\n  socket.on("connect", () => {
+  renderBlocked();
+
+  socket.on("connect", () => {
     if (!searching) startBtn.disabled = false;
   });
   socket.on("disconnect", () => {
