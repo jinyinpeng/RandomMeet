@@ -226,8 +226,12 @@
       if (!pair) return;
       const localCandidate = stats.get(pair.localCandidateId);
       const remoteCandidate = stats.get(pair.remoteCandidateId);
+      // A relay candidate is a valid WebRTC path, not proof that video is broken.
+      // Do not disable video just because TURN is selected; that can make a healthy
+      // connection appear to have lost its camera. Audio fallback remains available
+      // for explicit peer signaling, but relay selection alone must not trigger it.
       if (localCandidate?.candidateType === "relay" || remoteCandidate?.candidateType === "relay") {
-        await fallbackToAudio(true);
+        console.info("[RandomMeet] TURN relay selected; keeping video enabled.");
       }
     } catch (error) {
       console.info("[RandomMeet] Could not inspect selected ICE pair", error);
