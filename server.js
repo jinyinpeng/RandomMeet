@@ -82,7 +82,7 @@ function match(id, prefs) {
 
 io.on("connection", socket => {
   socket.on("find", prefs => {
-    if (!allowEvent(socket, "match", 2, 1000)) {
+    if (!allowEvent(socket, "find", 2, 1000)) {
       socket.emit("status", "操作太快了，请稍等片刻再试。");
       return;
     }
@@ -92,7 +92,7 @@ io.on("connection", socket => {
   });
 
   socket.on("skip", prefs => {
-    if (!allowEvent(socket, "match", 2, 1000)) {
+    if (!allowEvent(socket, "skip", 5, 1000)) {
       socket.emit("status", "操作太快了，请稍等片刻再试。");
       return;
     }
