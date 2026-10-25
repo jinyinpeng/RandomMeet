@@ -13,6 +13,8 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
 app.use(express.static(path.join(__dirname, "public")));
@@ -21,6 +23,11 @@ const waiting = new Map();
 const peers = new Map();
 const pairSessions = new Map();
 const eventWindows = new Map();
+const socketClients = new Map();
+// Bounded in-memory report queue; durable storage is still required for public launch.
+const reports = [];
+const MAX_REPORTS = 500;
+const VALID_REPORT_REASONS = new Set(["harassment", "sexual_content", "underage", "spam_or_scam", "threats", "other"]);
 
 function allowEvent(socket, name, limit, windowMs) {
   const now = Date.now();
@@ -64,6 +71,11 @@ function compatible(want, actual) {
 }
 
 function canPair(prefs, otherPrefs) {
+  const leftId = prefs.clientId;
+  const rightId = otherPrefs.clientId;
+  if (leftId && rightId && leftId === rightId) return false;
+  if (leftId && (otherPrefs.blockedIds.includes(leftId) || otherPrefs.recentMatches.includes(leftId))) return false;
+  if (rightId && (prefs.blockedIds.includes(rightId) || prefs.recentMatches.includes(rightId))) return false;
   return prefs.mode === otherPrefs.mode &&
     compatible(prefs.wantGender, otherPrefs.gender) &&
     compatible(prefs.wantNationality, otherPrefs.nationality) &&
@@ -79,7 +91,10 @@ function normalizePrefs(prefs) {
     gender: genders.includes(prefs?.gender) ? prefs.gender : "",
     nationality: nationalities.includes(prefs?.nationality) ? prefs.nationality : "",
     wantGender: ["any", "female", "male", "other"].includes(prefs?.wantGender) ? prefs.wantGender : "any",
-    wantNationality: ["any", ...nationalities].includes(prefs?.wantNationality) ? prefs.wantNationality : "any"
+    wantNationality: ["any", ...nationalities].includes(prefs?.wantNationality) ? prefs.wantNationality : "any",
+    clientId: typeof prefs?.clientId === "string" && /^[0-9a-f-]{36}$/i.test(prefs.clientId) ? prefs.clientId : "",
+    blockedIds: Array.isArray(prefs?.blockedIds) ? prefs.blockedIds.filter(id => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200) : [],
+    recentMatches: Array.isArray(prefs?.recentMatches) ? prefs.recentMatches.filter(id => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(-20) : []
   };
 }
 
@@ -95,8 +110,8 @@ function match(id, prefs) {
     peers.set(other, id);
     pairSessions.set(id, sessionId);
     pairSessions.set(other, sessionId);
-    io.to(id).emit("matched", { peerId: other, initiator: true, sessionId });
-    io.to(other).emit("matched", { peerId: id, initiator: false, sessionId });
+    io.to(id).emit("matched", { peerId: other, peerClientId: otherPrefs.clientId || "", initiator: true, sessionId });
+    io.to(other).emit("matched", { peerId: id, peerClientId: prefs.clientId || "", initiator: false, sessionId });
     return;
   }
 
@@ -112,7 +127,9 @@ io.on("connection", socket => {
     }
     endPair(socket.id);
     waiting.delete(socket.id);
-    match(socket.id, normalizePrefs(prefs));
+    const normalized = normalizePrefs(prefs);
+    socketClients.set(socket.id, normalized.clientId);
+    match(socket.id, normalized);
   });
 
   socket.on("skip", prefs => {
@@ -122,7 +139,9 @@ io.on("connection", socket => {
     }
     endPair(socket.id);
     waiting.delete(socket.id);
-    match(socket.id, normalizePrefs(prefs));
+    const normalized = normalizePrefs(prefs);
+    socketClients.set(socket.id, normalized.clientId);
+    match(socket.id, normalized);
   });
 
   socket.on("leave", () => {
@@ -142,18 +161,57 @@ io.on("connection", socket => {
     io.to(other).emit("signal", data);
   });
 
-  socket.on("report", () => {
-    if (!allowEvent(socket, "report", 3, 60000)) {
-      socket.emit("status", "Too many reports. This beta cannot submit or process reports.");
+  socket.on("block", data => {
+    if (!allowEvent(socket, "block", 5, 60000)) {
+      socket.emit("status", "Too many block requests. Please wait a moment.");
       return;
     }
-    // Do not imply that a report was stored: this MVP has no report persistence or moderation workflow.
-    socket.emit("status", "This beta cannot submit reports and has no human moderation. End and leave unsafe chats immediately.");
+    const other = peers.get(socket.id);
+    const currentSession = pairSessions.get(socket.id);
+    if (!other || !data || typeof data.sessionId !== "string" ||
+        data.sessionId !== currentSession || pairSessions.get(other) !== currentSession) return;
+    const blockedClientId = socketClients.get(other);
+    endPair(socket.id);
+    waiting.delete(socket.id);
+    waiting.delete(other);
+    socket.emit("blocked", { clientId: blockedClientId || "" });
+  });
+
+  socket.on("report", data => {
+    if (!allowEvent(socket, "report", 3, 60000)) {
+      socket.emit("report-result", { ok: false, message: "Too many reports. Please wait before trying again." });
+      return;
+    }
+    const other = peers.get(socket.id);
+    const currentSession = pairSessions.get(socket.id);
+    if (!other || !data || typeof data.sessionId !== "string" ||
+        data.sessionId !== currentSession || pairSessions.get(other) !== currentSession) {
+      socket.emit("report-result", { ok: false, message: "This chat has already ended. Reconnect before submitting a report." });
+      return;
+    }
+    if (!VALID_REPORT_REASONS.has(data.reason)) {
+      socket.emit("report-result", { ok: false, message: "Choose a valid report reason." });
+      return;
+    }
+    const report = {
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      reason: data.reason,
+      reporterId: socketClients.get(socket.id) || "",
+      reportedId: socketClients.get(other) || "",
+      sessionId: currentSession
+    };
+    reports.push(report);
+    if (reports.length > MAX_REPORTS) reports.shift();
+    socket.emit("report-result", { ok: true, message: "Report received. Thank you for helping keep RandomMeet safer. End this chat if you feel unsafe." });
+    endPair(socket.id);
+    waiting.delete(socket.id);
   });
 
   socket.on("disconnect", () => {
     waiting.delete(socket.id);
     endPair(socket.id);
+    socketClients.delete(socket.id);
     for (const key of eventWindows.keys()) {
       if (key.startsWith(socket.id + ":")) eventWindows.delete(key);
     }
@@ -161,6 +219,13 @@ io.on("connection", socket => {
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "RandomMeet" }));
+app.get("/admin/reports", (req, res) => {
+  const token = process.env.REPORT_ADMIN_TOKEN;
+  if (!token) return res.status(503).json({ error: "Report administration is not configured." });
+  if (req.get("x-admin-token") !== token) return res.status(401).json({ error: "Unauthorized." });
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ reports: reports.slice().reverse(), note: "Reports are held in volatile process memory and may be lost on restart or redeploy." });
+});
 app.get("/ice-config", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const stunUrls = (process.env.STUN_URLS || "stun:stun.l.google.com:19302")
