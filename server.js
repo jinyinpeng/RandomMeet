@@ -44,6 +44,9 @@ function allowEvent(socket, name, limit, windowMs) {
 
 function validSignal(data) {
   if (!data || typeof data !== "object" || typeof data.sessionId !== "string") return false;
+  if (data.type === "audio-fallback") {
+    return data.data && typeof data.data === "object" && data.data.reason === "turn-relay";
+  }
   if (!["offer", "answer", "ice"].includes(data.type)) return false;
   if (data.type === "offer" || data.type === "answer") {
     return data.data && typeof data.data === "object" &&
