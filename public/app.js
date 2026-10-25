@@ -126,8 +126,21 @@
     };
     connection.oniceconnectionstatechange = () => {
       if (pc !== connection || generation !== gen) return;
-      if (connection.iceConnectionState === "failed") {
-        say("ICE 连接失败：服务器信令已建立，但两端网络无法打通，通常需要配置 TURN 中继。");
+      const state = connection.iceConnectionState;
+      if (state === "checking") say("信令已启动，正在检查两端媒体网络…");
+      else if (state === "connected" || state === "completed") say("网络通道已建立，正在启用媒体…");
+      else if (state === "failed") {
+        say("ICE 连接失败：两端媒体网络无法打通，通常需要配置可用的 TURN 中继。");
+      } else if (state === "disconnected") say("媒体网络暂时中断，正在尝试恢复…");
+    };
+    connection.onsignalingstatechange = () => {
+      if (pc === connection && generation === gen) {
+        console.info("[RandomMeet] signalingState:", connection.signalingState);
+      }
+    };
+    connection.onicegatheringstatechange = () => {
+      if (pc === connection && generation === gen) {
+        console.info("[RandomMeet] iceGatheringState:", connection.iceGatheringState);
       }
     };
 
@@ -137,6 +150,8 @@
       await connection.setLocalDescription(offer);
       if (pc !== connection || generation !== gen) return;
       socket.emit("signal", { type: "offer", data: connection.localDescription, sessionId });
+      say("已发送连接请求，等待对方建立媒体通道…");
+      console.info("[RandomMeet] offer sent", { sessionId });
     }
   }
 
@@ -233,6 +248,8 @@
 
       if (!message.data || pc !== connection || generation !== gen) return;
       if (message.type === "offer") {
+        console.info("[RandomMeet] offer received", { sessionId });
+        say("已收到对方连接请求，正在协商媒体…");
         await connection.setRemoteDescription(message.data);
         await flushPendingIce(connection, gen);
         if (pc !== connection || generation !== gen) return;
@@ -240,7 +257,11 @@
         await connection.setLocalDescription(answer);
         if (pc !== connection || generation !== gen) return;
         socket.emit("signal", { type: "answer", data: connection.localDescription, sessionId });
+        say("已回复连接请求，正在建立媒体通道…");
+        console.info("[RandomMeet] answer sent", { sessionId });
       } else if (message.type === "answer") {
+        console.info("[RandomMeet] answer received", { sessionId });
+        say("已收到对方回应，正在建立媒体通道…");
         await connection.setRemoteDescription(message.data);
         await flushPendingIce(connection, gen);
       }
@@ -252,7 +273,11 @@
   socket.on("signal", message => {
     if (!message || !["offer", "answer", "ice"].includes(message.type)) return;
     if (sessionId) {
-      if (message.sessionId !== sessionId) return;
+      if (message.sessionId !== sessionId) {
+        console.info("[RandomMeet] ignored stale signal");
+        return;
+      }
+      console.info("[RandomMeet] signal received:", message.type);
       void processSignal(message);
       return;
     }
