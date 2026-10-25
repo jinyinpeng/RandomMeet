@@ -9,6 +9,9 @@
   const hangupBtn = $("hangup");
   const reportBtn = $("report");
   const blockBtn = $("block");
+  const blockedGate = $("blockedGate");
+  const blockedList = $("blockedList");
+  const manageBlockedBtn = $("manageBlocked");
   const reportGate = $("reportGate");
   const reportForm = $("reportForm");
   const clientIdKey = "randommeet_client_id_v1";
@@ -75,6 +78,42 @@
     say("Profile saved. Choose your chat mode and match preferences to get started.");
   });
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
+  const renderBlocked = () => {
+    const blocked = readIdList(blockedKey);
+    $("blockedCount").textContent = String(blocked.length);
+    manageBlockedBtn.textContent = blocked.length ? "Manage blocked users (" + blocked.length + ")" : "Manage blocked users";
+    blockedList.replaceChildren();
+    if (!blocked.length) {
+      const empty = document.createElement("p");
+      empty.className = "blocked-empty";
+      empty.textContent = "You have not blocked anyone.";
+      blockedList.append(empty);
+      return;
+    }
+    blocked.slice().reverse().forEach(id => {
+      const row = document.createElement("div");
+      row.className = "blocked-entry";
+      const details = document.createElement("div");
+      details.className = "blocked-details";
+      const title = document.createElement("strong");
+      title.textContent = "Blocked browser";
+      const identifier = document.createElement("small");
+      identifier.textContent = "ID ending in " + id.slice(-6);
+      details.append(title, identifier);
+      const unblock = document.createElement("button");
+      unblock.type = "button";
+      unblock.className = "secondary-button unblock-button";
+      unblock.textContent = "Unblock";
+      unblock.addEventListener("click", () => {
+        const updated = readIdList(blockedKey).filter(item => item !== id);
+        writeIdList(blockedKey, updated, 200);
+        renderBlocked();
+        say("User unblocked. You may be matched with this browser again.");
+      });
+      row.append(details, unblock);
+      blockedList.append(row);
+    });
+  };
   const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any", clientId, blockedIds: readIdList(blockedKey).slice(-200), recentMatches: readIdList(recentKey).slice(-20) });
   const say = message => { status.textContent = message; };
 
@@ -299,6 +338,12 @@
     say("Submitting report…");
   });
 
+  manageBlockedBtn.onclick = () => {
+    renderBlocked();
+    blockedGate.hidden = false;
+  };
+  $("blockedClose").onclick = () => { blockedGate.hidden = true; };
+
   blockBtn.onclick = () => {
     if (!sessionId || !socket.connected) return;
     if (!window.confirm("Block this person and end the chat? You will not be matched with this browser again unless you clear this site's data.")) return;
@@ -315,7 +360,7 @@
     say("This person has been blocked on this browser and the chat has ended.");
   };
 
-  socket.on("connect", () => {
+  renderBlocked();\n\n  socket.on("connect", () => {
     if (!searching) startBtn.disabled = false;
   });
   socket.on("disconnect", () => {
