@@ -37,6 +37,8 @@
   let iceRestartAttempted = false;
   let connectionWatchdog = null;
   let mediaWatchdog = null;
+  let relayCheckTimer = null;
+  let audioFallbackApplied = false;
 
   // Require an explicit 18+ confirmation on every visit; first-time visitors must complete their profile.
   const ageGate = $("ageGate");
@@ -129,6 +131,9 @@
     generation += 1;
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     if (mediaWatchdog) clearTimeout(mediaWatchdog);
+    if (relayCheckTimer) clearInterval(relayCheckTimer);
+    relayCheckTimer = null;
+    audioFallbackApplied = false;
     connectionWatchdog = null;
     mediaWatchdog = null;
     iceRestartAttempted = false;
@@ -189,6 +194,46 @@
     }
   }
 
+  async function fallbackToAudio(notifyPeer = false) {
+    if (audioFallbackApplied) return;
+    audioFallbackApplied = true;
+    try {
+      if (pc) {
+        const videoSender = pc.getSenders().find(sender => sender.track && sender.track.kind === "video");
+        if (videoSender) await videoSender.replaceTrack(null);
+      }
+    } catch (error) {
+      console.warn("[RandomMeet] Could not detach video sender cleanly", error);
+    }
+    if (stream) {
+      stream.getVideoTracks().forEach(track => { track.enabled = false; track.stop(); });
+      local.srcObject = stream;
+    }
+    if (remote.srcObject && typeof remote.srcObject.getVideoTracks === "function") {
+      remote.srcObject.getVideoTracks().forEach(track => { track.enabled = false; });
+    }
+    say("A TURN relay is being used. Switched to audio-only to reduce bandwidth.");
+    if (notifyPeer && sessionId) socket.emit("signal", { type: "audio-fallback", data: { reason: "turn-relay" }, sessionId });
+  }
+
+  async function checkSelectedIcePair(connection, gen) {
+    if (pc !== connection || generation !== gen || audioFallbackApplied || mode() !== "video") return;
+    try {
+      const stats = await connection.getStats();
+      const reports = Array.from(stats.values());
+      const pair = reports.find(item => item.type === "candidate-pair" &&
+        (item.selected === true || (item.nominated === true && item.state === "succeeded")));
+      if (!pair) return;
+      const localCandidate = stats.get(pair.localCandidateId);
+      const remoteCandidate = stats.get(pair.remoteCandidateId);
+      if (localCandidate?.candidateType === "relay" || remoteCandidate?.candidateType === "relay") {
+        await fallbackToAudio(true);
+      }
+    } catch (error) {
+      console.info("[RandomMeet] Could not inspect selected ICE pair", error);
+    }
+  }
+
   async function connect(initiator, gen) {
     if (generation !== gen || !peerId || !sessionId) return;
     const connection = new RTCPeerConnection({
@@ -222,6 +267,10 @@
       if (pc !== connection || generation !== gen) return;
       if (connection.connectionState === "connected") {
         if (connectionWatchdog) clearTimeout(connectionWatchdog);
+        if (mode() === "video" && !relayCheckTimer) {
+          void checkSelectedIcePair(connection, gen);
+          relayCheckTimer = setInterval(() => { void checkSelectedIcePair(connection, gen); }, 4000);
+        }
         connectionWatchdog = null;
         say("Connected. You can start chatting.");
       } else if (connection.connectionState === "failed") {
@@ -474,13 +523,17 @@
   }
 
   socket.on("signal", message => {
-    if (!message || !["offer", "answer", "ice"].includes(message.type)) return;
+    if (!message || !["offer", "answer", "ice", "audio-fallback"].includes(message.type)) return;
     if (sessionId) {
       if (message.sessionId !== sessionId) {
         console.info("[RandomMeet] ignored stale signal");
         return;
       }
       console.info("[RandomMeet] signal received:", message.type);
+      if (message.type === "audio-fallback") {
+        void fallbackToAudio(false);
+        return;
+      }
       void processSignal(message);
       return;
     }
