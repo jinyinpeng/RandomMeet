@@ -23,6 +23,32 @@
   let connectionWatchdog = null;
   let mediaWatchdog = null;
 
+  // Require an explicit 18+ confirmation on every visit; first-time visitors must complete their profile.
+  const ageGate = $("ageGate");
+  const profileGate = $("profileGate");
+  const profileKey = "randommeet_profile_v1";
+  const savedProfile = () => { try { return JSON.parse(localStorage.getItem(profileKey) || "null"); } catch (_) { return null; } };
+  const validProfile = value => value && ["female","male","other"].includes(value.gender) && ["CN","IT","US","GB","JP","KR","FR","DE","ES","BR","IN","CA","AU","OTHER"].includes(value.nationality);
+  const enterApp = () => { ageGate.hidden = true; profileGate.hidden = true; };
+  $("ageConfirm").addEventListener("click", () => {
+    const profile = savedProfile();
+    if (validProfile(profile)) {
+      $("myGender").value = profile.gender; $("myNationality").value = profile.nationality; enterApp();
+    } else { ageGate.hidden = true; profileGate.hidden = false; $("onboardingGender").focus(); }
+  });
+  $("ageDeny").addEventListener("click", () => {
+    $("ageMessage").textContent = "抱歉，RandomMeet 仅供年满 18 周岁的用户使用。你不能继续进入。";
+    $("ageConfirm").disabled = true; $("ageDeny").disabled = true;
+  });
+  $("profileForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const gender = $("onboardingGender").value, nationality = $("onboardingNationality").value;
+    if (!gender || !nationality) return;
+    const profile = {gender,nationality};
+    try { localStorage.setItem(profileKey, JSON.stringify(profile)); } catch (_) {}
+    $("myGender").value = gender; $("myNationality").value = nationality; enterApp();
+    say("资料已保存。选择聊天方式和遇见偏好，开始你的随机相遇。");
+  });
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
   const preferences = () => ({ mode: mode(), gender: $("myGender").value || "", nationality: $("myNationality").value || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any" });
   const say = message => { status.textContent = message; };
