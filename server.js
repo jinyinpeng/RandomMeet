@@ -122,7 +122,7 @@ io.on("connection", socket => {
     }
     endPair(socket.id);
     waiting.delete(socket.id);
-    match(socket.id, { mode: prefs?.mode === "voice" ? "voice" : "video" });
+    match(socket.id, normalizePrefs(prefs));
   });
 
   socket.on("leave", () => {
