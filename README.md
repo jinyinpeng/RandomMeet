@@ -15,7 +15,7 @@
 
 ## 当前限制（请在公开推广前处理）
 
-- **没有 TURN 中继**：目前只配置 Google STUN。部分 NAT、运营商、公司/学校网络或防火墙环境下，连接可能失败。生产环境应配置托管 TURN 或 coturn。
+- **TURN 中继需外部配置**：代码已支持通过 `/ice-config` 发放短期 TURN 凭据，但当前 Render 尚未配置 TURN 服务及密钥；在配置前仍只使用 STUN。部分 NAT、运营商、公司/学校网络或防火墙环境下，连接可能失败。
 - **举报未落库**：举报按钮只显示说明，不会保存案件、通知审核人员或触发封禁。
 - **没有真正的屏蔽功能**：用户不能可靠地屏蔽某个对象或阻止再次匹配。
 - **没有人工审核后台**：没有案件队列、审核工具、申诉流程或响应时限。
@@ -38,6 +38,12 @@ npm start
 ## 环境变量
 
 - `PORT`：监听端口，默认 `3000`。
+- `STUN_URLS`：可选，逗号分隔的 STUN URL；默认使用 Google 公共 STUN。
+- `TURN_URLS`：可选，逗号分隔的 TURN/TURNS URL。
+- `TURN_SHARED_SECRET`：可选，coturn REST API 共享密钥；仅保存在 Render 环境变量中，不能放入前端或 Git 仓库。
+- `TURN_TTL_SECONDS`：可选，临时 TURN 凭据有效期，默认 3600 秒，服务端限制为 300–86400 秒。
+
+配置了 `TURN_URLS` 与 `TURN_SHARED_SECRET` 后，`/ice-config` 会为客户端生成带有效期的临时凭据；未配置时继续使用 STUN。TURN 服务本身需另行提供并正确配置 coturn REST 认证。
 
 ## 部署与安全提醒
 
