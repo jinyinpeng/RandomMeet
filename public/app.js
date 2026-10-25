@@ -70,9 +70,20 @@
   }
 
   async function connect(initiator, gen) {
-    const connection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+    let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+    try {
+      const response = await fetch("/ice-config", { cache: "no-store" });
+      if (response.ok) {
+        const config = await response.json();
+        if (Array.isArray(config.iceServers) && config.iceServers.length) {
+          iceServers = config.iceServers;
+        }
+      }
+    } catch (error) {
+      // Keep the public STUN fallback if the optional configuration endpoint is unavailable.
+    }
+    if (generation !== gen || !peerId || !sessionId) return;
+    const connection = new RTCPeerConnection({ iceServers });
     pc = connection;
     pendingIce = [];
 
