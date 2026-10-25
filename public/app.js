@@ -12,6 +12,8 @@
   const blockedGate = $("blockedGate");
   const blockedList = $("blockedList");
   const manageBlockedBtn = $("manageBlocked");
+  const preferencesToggle = $("preferencesToggle");
+  const preferencesPanel = $("preferencesPanel");
   const reportGate = $("reportGate");
   const reportForm = $("reportForm");
   const clientIdKey = "randommeet_client_id_v1";
@@ -117,6 +119,24 @@
     });
   };
   const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any", clientId, blockedIds: readIdList(blockedKey).slice(-200), recentMatches: readIdList(recentKey).slice(-20) });
+  preferencesToggle.addEventListener("click", () => {
+    const opening = preferencesPanel.hidden;
+    preferencesPanel.hidden = !opening;
+    preferencesToggle.setAttribute("aria-expanded", String(opening));
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".preferences-menu")) {
+      preferencesPanel.hidden = true;
+      preferencesToggle.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      preferencesPanel.hidden = true;
+      preferencesToggle.setAttribute("aria-expanded", "false");
+      preferencesToggle.focus();
+    }
+  });
   const say = message => { status.textContent = message; };
 
   function setSessionControls(active) {
