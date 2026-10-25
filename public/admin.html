@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Safety Console · RandomMeet</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header class="topbar"><a class="brand" href="/">✳ random<span>meet</span></a><span class="beta">Safety console</span></header>
+<main><p class="eyebrow">RESTRICTED ADMIN TOOL</p><h1>Safety <span class="gradient-text">reports</span></h1>
+<p class="subtitle">Enter the REPORT_ADMIN_TOKEN configured in the Render environment. Do not share this token. Reports are currently stored in volatile memory and can be lost on restart or redeploy.</p>
+<section class="match-card admin-card"><form id="adminForm" class="profile-form"><label class="field"><span>Admin token</span><input id="adminToken" type="password" autocomplete="current-password" required></label><button class="primary-button modal-primary" type="submit">Load reports</button></form>
+<div class="admin-toolbar"><strong id="reportCount">No reports loaded</strong><button id="refreshReports" class="secondary-button" type="button" disabled>Refresh</button></div><p id="adminStatus" role="status" aria-live="polite"></p><div id="reportsList" class="reports-list"></div></section>
+<p><a href="/">Back to RandomMeet</a></p></main><script src="/admin.js"></script></body></html>
