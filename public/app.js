@@ -18,6 +18,10 @@
   let pendingIce = [];
   let earlySignals = [];
   let configuredIceServers = null;
+  let currentInitiator = false;
+  let iceRestartAttempted = false;
+  let connectionWatchdog = null;
+  let mediaWatchdog = null;
 
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
   const say = message => { status.textContent = message; };
@@ -31,6 +35,11 @@
 
   function cleanup(stopMedia = false) {
     generation += 1;
+    if (connectionWatchdog) clearTimeout(connectionWatchdog);
+    if (mediaWatchdog) clearTimeout(mediaWatchdog);
+    connectionWatchdog = null;
+    mediaWatchdog = null;
+    iceRestartAttempted = false;
     pendingIce = [];
     if (pc) {
       pc.onicecandidate = null;
@@ -104,6 +113,8 @@
         : new MediaStream([event.track]);
       remote.srcObject = incoming;
       $("remoteText").hidden = true;
+      if (mediaWatchdog) clearTimeout(mediaWatchdog);
+      mediaWatchdog = null;
       // Explicitly start playback and surface autoplay failures instead of silently appearing connected.
       const playback = remote.play();
       if (playback && typeof playback.catch === "function") {
@@ -117,9 +128,11 @@
     connection.onconnectionstatechange = () => {
       if (pc !== connection || generation !== gen) return;
       if (connection.connectionState === "connected") {
+        if (connectionWatchdog) clearTimeout(connectionWatchdog);
+        connectionWatchdog = null;
         say("已连接，可以开始聊天。");
       } else if (connection.connectionState === "failed") {
-        say("媒体连接失败：当前网络可能需要 TURN 中继。请稍后重试或更换网络。");
+        say("媒体连接失败：已尝试自动恢复；如果仍未连接，请点击“跳过”重新匹配。");
       } else if (connection.connectionState === "disconnected") {
         say("媒体连接暂时中断，正在等待网络恢复…");
       }
@@ -130,7 +143,28 @@
       if (state === "checking") say("信令已启动，正在检查两端媒体网络…");
       else if (state === "connected" || state === "completed") say("网络通道已建立，正在启用媒体…");
       else if (state === "failed") {
-        say("ICE 连接失败：两端媒体网络无法打通，通常需要配置可用的 TURN 中继。");
+        if (currentInitiator && !iceRestartAttempted) {
+          iceRestartAttempted = true;
+          say("媒体网络连接失败，正在自动尝试重新协商…");
+          (async () => {
+            try {
+              const offer = await connection.createOffer({ iceRestart: true });
+              if (pc !== connection || generation !== gen) return;
+              await connection.setLocalDescription(offer);
+              if (pc !== connection || generation !== gen) return;
+              socket.emit("signal", { type: "offer", data: connection.localDescription, sessionId });
+              console.info("[RandomMeet] ICE restart offer sent", { sessionId });
+            } catch (error) {
+              if (pc === connection && generation === gen) {
+                say("自动恢复失败：请点击“跳过”重新匹配，或尝试更换网络。");
+              }
+            }
+          })();
+        } else if (iceRestartAttempted) {
+          say("自动恢复后媒体网络仍未连通。请点击“跳过”重试；若反复失败，服务器可能需要配置 TURN 中继。");
+        } else {
+          say("正在等待对方尝试恢复媒体连接…");
+        }
       } else if (state === "disconnected") say("媒体网络暂时中断，正在尝试恢复…");
     };
     connection.onsignalingstatechange = () => {
@@ -214,8 +248,18 @@
     cleanup(false);
     peerId = data.peerId;
     sessionId = data.sessionId || null;
+    currentInitiator = Boolean(data.initiator);
     const gen = generation;
     say("已匹配，正在建立连接…");
+    connectionWatchdog = setTimeout(() => {
+      if (generation !== gen || !pc || pc.connectionState === "connected") return;
+      if (pc.iceConnectionState === "failed") return;
+      say("连接等待超过 15 秒：正在尝试建立媒体通道。请确认双方都允许摄像头/麦克风；若持续无画面声音，请点击“跳过”重试。");
+    }, 15000);
+    mediaWatchdog = setTimeout(() => {
+      if (generation !== gen || !pc || pc.connectionState !== "connected" || remote.srcObject) return;
+      say("连接已建立，但还没有收到对方媒体。请确认对方已允许摄像头/麦克风，并检查是否选择了相同模式。");
+    }, 20000);
     try {
       await connect(Boolean(data.initiator), gen);
       // Socket events from the two peers can cross in flight: an offer may arrive
