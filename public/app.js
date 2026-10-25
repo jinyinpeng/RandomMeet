@@ -40,7 +40,8 @@
   countryOptions.forEach(({code, name}) => matchCountry.add(new Option(name, code)));
   const savedProfile = () => { try { return JSON.parse(localStorage.getItem(profileKey) || "null"); } catch (_) { return null; } };
   const validProfile = value => value && ["female","male","other"].includes(value.gender) && countryCodes.includes(value.nationality);
-  let currentProfile = validProfile(savedProfile()) ? savedProfile() : null;\n  const enterApp = () => { ageGate.hidden = true; profileGate.hidden = true; };
+  let currentProfile = validProfile(savedProfile()) ? savedProfile() : null;
+  const enterApp = () => { ageGate.hidden = true; profileGate.hidden = true; };
   $("ageConfirm").addEventListener("click", () => {
     const profile = savedProfile();
     if (validProfile(profile)) {
@@ -55,7 +56,8 @@
     event.preventDefault();
     const gender = $("onboardingGender").value, nationality = $("onboardingNationality").value;
     if (!gender || !nationality) return;
-    const profile = {gender,nationality};\n    currentProfile = profile;
+    const profile = {gender,nationality};
+    currentProfile = profile;
     try { localStorage.setItem(profileKey, JSON.stringify(profile)); } catch (_) {}
     enterApp();
     say("Profile saved. Choose your chat mode and match preferences to get started.");
