@@ -24,6 +24,7 @@
   let mediaWatchdog = null;
 
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
+  const preferences = () => ({ mode: mode(), gender: $("myGender").value || "", nationality: $("myNationality").value || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any" });
   const say = message => { status.textContent = message; };
 
   function setSessionControls(active) {
@@ -201,7 +202,7 @@
       searching = true;
       setSessionControls(true);
       say("正在寻找在线用户…");
-      socket.emit("find", { mode: mode() });
+      socket.emit("find", preferences());
     } catch (error) {
       cleanup(true);
       searching = false;
@@ -214,7 +215,7 @@
     if (!searching || !socket.connected) return;
     cleanup(false);
     say("正在寻找下一位…");
-    socket.emit("skip", { mode: mode() });
+    socket.emit("skip", preferences());
   };
 
   hangupBtn.onclick = () => {
