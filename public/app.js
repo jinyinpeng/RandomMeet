@@ -352,6 +352,7 @@
       const blocked = readIdList(blockedKey).filter(id => id !== targetId);
       blocked.push(targetId);
       writeIdList(blockedKey, blocked, 200);
+      renderBlocked();
     }
     socket.emit("block", { sessionId });
     cleanup(true);
