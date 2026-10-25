@@ -16,6 +16,7 @@
   let searching = false;
   let generation = 0;
   let pendingIce = [];
+  let configuredIceServers = null;
 
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
   const say = message => { status.textContent = message; };
@@ -69,21 +70,27 @@
     }
   }
 
-  async function connect(initiator, gen) {
-    let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+  async function loadIceConfig() {
+    if (configuredIceServers) return;
+    configuredIceServers = [{ urls: "stun:stun.l.google.com:19302" }];
     try {
       const response = await fetch("/ice-config", { cache: "no-store" });
       if (response.ok) {
         const config = await response.json();
         if (Array.isArray(config.iceServers) && config.iceServers.length) {
-          iceServers = config.iceServers;
+          configuredIceServers = config.iceServers;
         }
       }
     } catch (error) {
       // Keep the public STUN fallback if the optional configuration endpoint is unavailable.
     }
+  }
+
+  async function connect(initiator, gen) {
     if (generation !== gen || !peerId || !sessionId) return;
-    const connection = new RTCPeerConnection({ iceServers });
+    const connection = new RTCPeerConnection({
+      iceServers: configuredIceServers || [{ urls: "stun:stun.l.google.com:19302" }]
+    });
     pc = connection;
     pendingIce = [];
 
@@ -122,6 +129,7 @@
     }
     try {
       await startMedia();
+      await loadIceConfig();
       cleanup(false);
       searching = true;
       setSessionControls(true);
