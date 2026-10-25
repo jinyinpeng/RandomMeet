@@ -77,8 +77,8 @@ function canPair(prefs, otherPrefs) {
   const leftId = prefs.clientId;
   const rightId = otherPrefs.clientId;
   if (leftId && rightId && leftId === rightId) return false;
-  if (leftId && (otherPrefs.blockedIds.includes(leftId) || otherPrefs.recentMatches.includes(leftId))) return false;
-  if (rightId && (prefs.blockedIds.includes(rightId) || prefs.recentMatches.includes(rightId))) return false;
+  if (leftId && otherPrefs.blockedIds.includes(leftId)) return false;
+  if (rightId && prefs.blockedIds.includes(rightId)) return false;
   return prefs.mode === otherPrefs.mode &&
     compatible(prefs.wantGender, otherPrefs.gender) &&
     compatible(prefs.wantNationality, otherPrefs.nationality) &&
@@ -121,9 +121,9 @@ function match(id, prefs) {
         rightWantsGenderCompatible: compatible(otherPrefs.wantGender, prefs.gender),
         rightWantsNationalityCompatible: compatible(otherPrefs.wantNationality, prefs.nationality),
         sameClient: Boolean(prefs.clientId && otherPrefs.clientId && prefs.clientId === otherPrefs.clientId),
-        blockedOrRecent: Boolean(
-          (prefs.clientId && (otherPrefs.blockedIds.includes(prefs.clientId) || otherPrefs.recentMatches.includes(prefs.clientId))) ||
-          (otherPrefs.clientId && (prefs.blockedIds.includes(otherPrefs.clientId) || prefs.recentMatches.includes(otherPrefs.clientId)))
+        blocked: Boolean(
+          (prefs.clientId && otherPrefs.blockedIds.includes(prefs.clientId)) ||
+          (otherPrefs.clientId && prefs.blockedIds.includes(otherPrefs.clientId))
         )
       }));
       continue;
