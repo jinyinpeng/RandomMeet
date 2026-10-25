@@ -8,6 +8,18 @@
   const skipBtn = $("skip");
   const hangupBtn = $("hangup");
   const reportBtn = $("report");
+  const blockBtn = $("block");
+  const reportGate = $("reportGate");
+  const reportForm = $("reportForm");
+  const clientIdKey = "randommeet_client_id_v1";
+  const blockedKey = "randommeet_blocked_ids_v1";
+  const recentKey = "randommeet_recent_matches_v1";
+  const readIdList = key => { try { const v = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; } catch (_) { return []; } };
+  const writeIdList = (key, list, max) => { try { localStorage.setItem(key, JSON.stringify(list.slice(-max))); } catch (_) {} };
+  const makeId = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); }));
+  let clientId = "";
+  try { clientId = localStorage.getItem(clientIdKey) || ""; if (!/^[0-9a-f-]{36}$/i.test(clientId)) clientId = makeId(); localStorage.setItem(clientIdKey, clientId); } catch (_) { clientId = makeId(); }
+  let peerClientId = "";
 
   let stream = null;
   let pc = null;
@@ -63,7 +75,7 @@
     say("Profile saved. Choose your chat mode and match preferences to get started.");
   });
   const mode = () => document.querySelector('input[name="mode"]:checked').value;
-  const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any" });
+  const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any", clientId, blockedIds: readIdList(blockedKey).slice(-200), recentMatches: readIdList(recentKey).slice(-20) });
   const say = message => { status.textContent = message; };
 
   function setSessionControls(active) {
@@ -71,6 +83,7 @@
     skipBtn.disabled = !active;
     hangupBtn.disabled = !active;
     reportBtn.disabled = !active;
+    blockBtn.disabled = !active;
   }
 
   function cleanup(stopMedia = false) {
@@ -89,6 +102,7 @@
       pc = null;
     }
     peerId = null;
+    peerClientId = "";
     sessionId = null;
     remote.srcObject = null;
     $("remoteText").hidden = false;
@@ -266,8 +280,38 @@
   };
 
   reportBtn.onclick = () => {
-    socket.emit("report");
-    say("Reporting is not active in this beta. Reports are not saved or sent to moderators.");
+    if (!sessionId || !socket.connected) return;
+    reportGate.hidden = false;
+    $("reportReason").focus();
+  };
+
+  $("reportCancel").onclick = () => { reportGate.hidden = true; reportForm.reset(); };
+  reportForm.addEventListener("submit", event => {
+    event.preventDefault();
+    if (!sessionId || !socket.connected) {
+      reportGate.hidden = true;
+      say("This chat has already ended. Find another match before reporting.");
+      return;
+    }
+    socket.emit("report", { sessionId, reason: $("reportReason").value });
+    $("reportSubmit").disabled = true;
+    say("Submitting report…");
+  });
+
+  blockBtn.onclick = () => {
+    if (!sessionId || !socket.connected) return;
+    if (!window.confirm("Block this person and end the chat? You will not be matched with this browser again unless you clear this site's data.")) return;
+    const targetId = peerClientId;
+    if (targetId) {
+      const blocked = readIdList(blockedKey).filter(id => id !== targetId);
+      blocked.push(targetId);
+      writeIdList(blockedKey, blocked, 200);
+    }
+    socket.emit("block", { sessionId });
+    cleanup(true);
+    searching = false;
+    setSessionControls(false);
+    say("This person has been blocked on this browser and the chat has ended.");
   };
 
   socket.on("connect", () => {
@@ -283,10 +327,34 @@
     say("Could not connect to the server. Check your connection and try again.");
   });
   socket.on("status", message => say(message));
+  socket.on("report-result", result => {
+    reportGate.hidden = true;
+    $("reportSubmit").disabled = false;
+    reportForm.reset();
+    if (result?.ok) {
+      cleanup(true);
+      searching = false;
+      setSessionControls(false);
+    }
+    say(result?.message || "We could not submit your report. Please end the chat if you feel unsafe.");
+  });
+  socket.on("blocked", data => {
+    if (data?.clientId) {
+      const blocked = readIdList(blockedKey).filter(id => id !== data.clientId);
+      blocked.push(data.clientId);
+      writeIdList(blockedKey, blocked, 200);
+    }
+  });
 
   socket.on("matched", async data => {
     cleanup(false);
     peerId = data.peerId;
+    peerClientId = typeof data.peerClientId === "string" ? data.peerClientId : "";
+    if (peerClientId) {
+      const recent = readIdList(recentKey).filter(id => id !== peerClientId);
+      recent.push(peerClientId);
+      writeIdList(recentKey, recent, 20);
+    }
     sessionId = data.sessionId || null;
     currentInitiator = Boolean(data.initiator);
     const gen = generation;
