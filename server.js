@@ -59,10 +59,34 @@ function endPair(id) {
   }
 }
 
+function compatible(want, actual) {
+  return !want || want === "any" || (Boolean(actual) && actual !== "any" && want === actual);
+}
+
+function canPair(prefs, otherPrefs) {
+  return prefs.mode === otherPrefs.mode &&
+    compatible(prefs.wantGender, otherPrefs.gender) &&
+    compatible(prefs.wantNationality, otherPrefs.nationality) &&
+    compatible(otherPrefs.wantGender, prefs.gender) &&
+    compatible(otherPrefs.wantNationality, prefs.nationality);
+}
+
+function normalizePrefs(prefs) {
+  const genders = ["", "female", "male", "other"];
+  const nationalities = ["", "CN", "IT", "US", "GB", "JP", "KR", "FR", "DE", "ES", "BR", "IN", "CA", "AU", "OTHER"];
+  return {
+    mode: prefs?.mode === "voice" ? "voice" : "video",
+    gender: genders.includes(prefs?.gender) ? prefs.gender : "",
+    nationality: nationalities.includes(prefs?.nationality) ? prefs.nationality : "",
+    wantGender: ["any", "female", "male", "other"].includes(prefs?.wantGender) ? prefs.wantGender : "any",
+    wantNationality: ["any", ...nationalities].includes(prefs?.wantNationality) ? prefs.wantNationality : "any"
+  };
+}
+
 function match(id, prefs) {
   for (const [other, otherPrefs] of waiting) {
     if (other === id) continue;
-    if (prefs.mode !== otherPrefs.mode) continue;
+    if (!canPair(prefs, otherPrefs)) continue;
 
     waiting.delete(other);
     waiting.delete(id);
@@ -88,7 +112,7 @@ io.on("connection", socket => {
     }
     endPair(socket.id);
     waiting.delete(socket.id);
-    match(socket.id, { mode: prefs?.mode === "voice" ? "voice" : "video" });
+    match(socket.id, normalizePrefs(prefs));
   });
 
   socket.on("skip", prefs => {
