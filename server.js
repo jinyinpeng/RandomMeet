@@ -117,7 +117,7 @@ io.on("connection", socket => {
 
   socket.on("skip", prefs => {
     if (!allowEvent(socket, "skip", 5, 1000)) {
-      socket.emit("status", "操作太快了，请稍等片刻再试。");
+      socket.emit("status", "You are doing that too quickly. Please wait a moment and try again.");
       return;
     }
     endPair(socket.id);
