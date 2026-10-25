@@ -93,6 +93,7 @@ function normalizePrefs(prefs) {
     mode: prefs?.mode === "voice" ? "voice" : "video",
     gender: genders.includes(prefs?.gender) ? prefs.gender : "",
     nationality: nationalities.includes(prefs?.nationality) ? prefs.nationality : "",
+    avatar: typeof prefs?.avatar === "string" && prefs.avatar.length <= 60000 && /^data:image\/(jpeg|png|webp);base64,/.test(prefs.avatar) ? prefs.avatar : "",
     wantGender: ["any", "female", "male", "other"].includes(prefs?.wantGender) ? prefs.wantGender : "any",
     wantNationality: ["any", ...nationalities].includes(prefs?.wantNationality) ? prefs.wantNationality : "any",
     clientId: typeof prefs?.clientId === "string" && /^[0-9a-f-]{36}$/i.test(prefs.clientId) ? prefs.clientId : "",
@@ -137,8 +138,8 @@ function match(id, prefs) {
     pairSessions.set(id, sessionId);
     pairSessions.set(other, sessionId);
     console.log("[match] paired", JSON.stringify({ left: id.slice(0, 8), right: other.slice(0, 8), mode: prefs.mode }));
-    io.to(id).emit("matched", { peerId: other, peerClientId: otherPrefs.clientId || "", initiator: true, sessionId });
-    io.to(other).emit("matched", { peerId: id, peerClientId: prefs.clientId || "", initiator: false, sessionId });
+    io.to(id).emit("matched", { peerId: other, peerClientId: otherPrefs.clientId || "", peerAvatar: otherPrefs.avatar || "", initiator: true, sessionId });
+    io.to(other).emit("matched", { peerId: id, peerClientId: prefs.clientId || "", peerAvatar: prefs.avatar || "", initiator: false, sessionId });
     return;
   }
 
