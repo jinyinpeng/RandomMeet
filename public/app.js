@@ -82,8 +82,8 @@
     startBtn.disabled = active || !socket.connected;
     skipBtn.disabled = !active;
     hangupBtn.disabled = !active;
-    reportBtn.disabled = !active;
-    blockBtn.disabled = !active;
+    reportBtn.disabled = !active || !sessionId;
+    blockBtn.disabled = !active || !sessionId;
   }
 
   function cleanup(stopMedia = false) {
@@ -267,6 +267,7 @@
   skipBtn.onclick = () => {
     if (!searching || !socket.connected) return;
     cleanup(false);
+    setSessionControls(true);
     say("Looking for your next match…");
     socket.emit("skip", preferences());
   };
@@ -359,6 +360,7 @@
       writeIdList(recentKey, recent, 20);
     }
     sessionId = data.sessionId || null;
+    setSessionControls(true);
     currentInitiator = Boolean(data.initiator);
     const gen = generation;
     say("Match found. Connecting…");
