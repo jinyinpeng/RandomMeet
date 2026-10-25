@@ -14,6 +14,10 @@
   const manageBlockedBtn = $("manageBlocked");
   const preferencesToggle = $("preferencesToggle");
   const preferencesPanel = $("preferencesPanel");
+  const avatarFile = $("avatarFile");
+  const avatarUploadButton = $("avatarUploadButton");
+  const localAvatar = $("localAvatar");
+  const remoteAvatar = $("remoteAvatar");
   const reportGate = $("reportGate");
   const reportForm = $("reportForm");
   const clientIdKey = "randommeet_client_id_v1";
@@ -59,6 +63,33 @@
   countryOptions.forEach(({code, name}) => matchCountry.add(new Option(name, code)));
   const savedProfile = () => { try { return JSON.parse(localStorage.getItem(profileKey) || "null"); } catch (_) { return null; } };
   const validProfile = value => value && ["female","male","other"].includes(value.gender) && countryCodes.includes(value.nationality);
+  const validAvatar = value => typeof value === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(value) && value.length <= 60000;
+  const setAvatarImage = (element, value) => { if (validAvatar(value)) { element.src = value; element.hidden = false; } else { element.removeAttribute("src"); element.hidden = true; } };
+  const showSavedAvatar = () => setAvatarImage(localAvatar, currentProfile?.avatar || "");
+  const saveAvatar = async file => {
+    if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) { say("Please choose a JPG, PNG, or WebP image."); return; }
+    if (file.size > 10 * 1024 * 1024) { say("Please choose an image smaller than 10 MB."); return; }
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 200 / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      const avatar = canvas.toDataURL("image/jpeg", 0.6);
+      if (avatar.length > 60000) { say("That photo is still too large after compression. Please try another image."); return; }
+      const profile = currentProfile || savedProfile() || {};
+      profile.avatar = avatar;
+      currentProfile = profile;
+      try { localStorage.setItem(profileKey, JSON.stringify(profile)); }
+      catch (_) { say("Could not save your photo in this browser. Try a smaller image."); return; }
+      showSavedAvatar();
+      say("Avatar saved. It will be shared with your next match.");
+    } catch (_) { say("Could not read that image. Please try another photo."); }
+  };
+  avatarUploadButton.addEventListener("click", () => avatarFile.click());
+  avatarFile.addEventListener("change", async () => { await saveAvatar(avatarFile.files?.[0]); avatarFile.value = ""; });
   let currentProfile = validProfile(savedProfile()) ? savedProfile() : null;
   const enterApp = () => { ageGate.hidden = true; profileGate.hidden = true; };
   $("ageConfirm").addEventListener("click", () => {
@@ -118,7 +149,7 @@
       blockedList.append(row);
     });
   };
-  const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any", clientId, blockedIds: readIdList(blockedKey).slice(-200), recentMatches: readIdList(recentKey).slice(-20) });
+  const preferences = () => ({ mode: mode(), gender: currentProfile?.gender || "", nationality: currentProfile?.nationality || "", avatar: validAvatar(currentProfile?.avatar) ? currentProfile.avatar : "", wantGender: $("wantGender").value || "any", wantNationality: $("wantNationality").value || "any", clientId, blockedIds: readIdList(blockedKey).slice(-200), recentMatches: readIdList(recentKey).slice(-20) });
   preferencesToggle.addEventListener("click", () => {
     const opening = preferencesPanel.hidden;
     preferencesPanel.hidden = !opening;
@@ -452,6 +483,7 @@
   };
 
   renderBlocked();
+  showSavedAvatar();
 
   socket.on("connect", () => {
     if (!searching) startBtn.disabled = false;
@@ -492,6 +524,7 @@
     cleanup(false);
     peerId = data.peerId;
     peerClientId = typeof data.peerClientId === "string" ? data.peerClientId : "";
+    setAvatarImage(remoteAvatar, data.peerAvatar || "");
     if (peerClientId) {
       const recent = readIdList(recentKey).filter(id => id !== peerClientId);
       recent.push(peerClientId);
