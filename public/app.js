@@ -98,8 +98,17 @@
     stream.getTracks().forEach(track => connection.addTrack(track, stream));
     connection.ontrack = event => {
       if (pc !== connection || generation !== gen) return;
-      remote.srcObject = event.streams[0];
+      // Some browsers may provide a track without an associated stream.
+      const incoming = event.streams && event.streams[0]
+        ? event.streams[0]
+        : new MediaStream([event.track]);
+      remote.srcObject = incoming;
       $("remoteText").hidden = true;
+      // Explicitly start playback and surface autoplay failures instead of silently appearing connected.
+      const playback = remote.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => say("已收到对方媒体，但浏览器阻止了播放。请点击对方画面或检查标签页静音设置。"));
+      }
     };
     connection.onicecandidate = event => {
       if (!event.candidate || pc !== connection || generation !== gen || !peerId) return;
@@ -110,7 +119,15 @@
       if (connection.connectionState === "connected") {
         say("已连接，可以开始聊天。");
       } else if (connection.connectionState === "failed") {
-        say("连接失败，可能是网络限制。请点击“跳过”重试。");
+        say("媒体连接失败：当前网络可能需要 TURN 中继。请稍后重试或更换网络。");
+      } else if (connection.connectionState === "disconnected") {
+        say("媒体连接暂时中断，正在等待网络恢复…");
+      }
+    };
+    connection.oniceconnectionstatechange = () => {
+      if (pc !== connection || generation !== gen) return;
+      if (connection.iceConnectionState === "failed") {
+        say("ICE 连接失败：服务器信令已建立，但两端网络无法打通，通常需要配置 TURN 中继。");
       }
     };
 
