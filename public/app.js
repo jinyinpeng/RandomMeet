@@ -208,7 +208,7 @@
   });
 
   socket.on("peer-ended", data => {
-    if (sessionId && data?.sessionId && data.sessionId !== sessionId) return;
+    if (data?.sessionId && (!sessionId || data.sessionId !== sessionId)) return;
     cleanup(true);
     searching = false;
     setSessionControls(false);
