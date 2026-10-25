@@ -5,3 +5,6 @@
 
 /* Safety actions and report dialog */
 .block-button{background:#fff0f0;color:#a92e3a;border:1px solid #f7d6d9!important}.block-button:disabled{opacity:.4;cursor:not-allowed}@media(max-width:700px){.action-row{grid-template-columns:1fr 1fr}.action-row .primary-button{grid-column:1/-1}.action-row .block-button{grid-column:1/-1}}
+
+/* Private safety console */
+.admin-card{margin-top:24px}.admin-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:22px}.reports-list{display:grid;gap:10px;margin-top:12px}.report-entry{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fcfbff;overflow-wrap:anywhere}.report-entry h3{margin:0 0 5px;text-transform:capitalize;font-size:14px}.report-entry p{margin:4px 0;color:var(--muted);font-size:12px}#adminStatus{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
